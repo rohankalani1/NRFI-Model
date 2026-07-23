@@ -69,21 +69,28 @@ def init_db() -> None:
         conn.close()
 
 
-def _upsert(df: pd.DataFrame, table: str, key_cols: list[str], conn: sqlite3.Connection) -> None:
+def _upsert(df: pd.DataFrame, table: str, conn: sqlite3.Connection) -> None:
+    """INSERT OR REPLACE keyed on the table's own PRIMARY KEY - atomic, and
+    avoids passing numpy scalar types (from .iterrows()) as bind parameters,
+    which silently fail to match SQLite's INTEGER affinity and previously
+    caused UNIQUE constraint violations on rerun."""
     if df.empty:
         return
-    keys = df[key_cols].drop_duplicates()
-    placeholders = " AND ".join(f"{c} = ?" for c in key_cols)
-    for _, row in keys.iterrows():
-        conn.execute(f"DELETE FROM {table} WHERE {placeholders}", tuple(row[c] for c in key_cols))
-    df.to_sql(table, conn, if_exists="append", index=False)
+    df = df.astype(object).where(pd.notnull(df), None)
+    cols = list(df.columns)
+    col_list = ", ".join(cols)
+    placeholders = ", ".join("?" for _ in cols)
+    conn.executemany(
+        f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})",
+        df[cols].values.tolist(),
+    )
     conn.commit()
 
 
 def upsert_predictions(df: pd.DataFrame) -> None:
     conn = get_connection()
     try:
-        _upsert(df, "predictions", ["game_pk"], conn)
+        _upsert(df, "predictions", conn)
     finally:
         conn.close()
 
@@ -91,7 +98,7 @@ def upsert_predictions(df: pd.DataFrame) -> None:
 def upsert_game_features(df: pd.DataFrame) -> None:
     conn = get_connection()
     try:
-        _upsert(df, "game_features", ["game_pk", "side"], conn)
+        _upsert(df, "game_features", conn)
     finally:
         conn.close()
 
@@ -99,7 +106,7 @@ def upsert_game_features(df: pd.DataFrame) -> None:
 def upsert_outcomes(df: pd.DataFrame) -> None:
     conn = get_connection()
     try:
-        _upsert(df, "outcomes", ["game_pk"], conn)
+        _upsert(df, "outcomes", conn)
     finally:
         conn.close()
 
