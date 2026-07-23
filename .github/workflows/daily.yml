@@ -1,0 +1,45 @@
+name: Daily NRFI pipeline
+
+on:
+  schedule:
+    # 14:00 UTC = 10am ET - after most probable pitchers are posted, well
+    # before the earliest first pitches.
+    - cron: "0 14 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Restore data cache (raw statcast + processed tables)
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/raw
+            data/processed
+          key: nrfi-data-${{ github.run_id }}
+          restore-keys: |
+            nrfi-data-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily pipeline
+        run: python src/daily_pipeline.py
+
+      - name: Commit updated database
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/nrfi.db
+          git diff --staged --quiet || git commit -m "Daily update: $(date -u +%Y-%m-%d)"
+          git push

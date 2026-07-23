@@ -1,0 +1,16 @@
+# large build-time data cache - restored via GitHub Actions cache, not git.
+# only data/nrfi.db (small, distilled) plus the hand-curated park factors
+# reference table are tracked.
+data/raw/*
+!data/raw/park_factors_2026.csv
+data/processed/
+data/models/
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# local machine-specific settings
+.claude/settings.local.json
